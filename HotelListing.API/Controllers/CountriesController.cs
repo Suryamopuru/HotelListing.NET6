@@ -1,11 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
+﻿using AutoMapper;
+using HotelListing.API.Data;
+using HotelListing.API.Models.Country;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using HotelListing.API.Data;
 
 namespace HotelListing.API.Controllers
 {
@@ -14,31 +11,38 @@ namespace HotelListing.API.Controllers
     public class CountriesController : ControllerBase
     {
         private readonly HotelListingDbContext _context;
+        private readonly IMapper _mapper;
 
-        public CountriesController(HotelListingDbContext context)
+        public CountriesController(HotelListingDbContext context, IMapper mapper)
         {
             _context = context;
+            this._mapper = mapper;
         }
 
         // GET: api/Countries
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Country>>> GetCountries()
+        public async Task<ActionResult<IEnumerable<GetCountryDto>>> GetCountries()
         {
             var countries = await _context.Countries.ToListAsync();
-            return Ok(countries);
+            //Since it returns a list we should let the automapper 
+            //know that . We should map to List
+            var records =_mapper.Map<List<GetCountryDto>>(countries); 
+            return Ok(records);
         }
 
         // GET: api/Countries/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Country>> GetCountry(int id)
+        public async Task<ActionResult<GetCountryDetailsDto>> GetCountry(int id)
         {
-            var country = await _context.Countries.FindAsync(id);
+            var country = await _context.Countries.Include(q=>q.Hotels)
+                         .FirstOrDefaultAsync(q=>q.Id==id);
+
 
             if (country == null)
             {
                 return NotFound();
             }
-
+            var countryDetailsDto=_mapper.Map<GetCountryDetailsDto>(country);
             return Ok(country);
         }
 
@@ -76,8 +80,13 @@ namespace HotelListing.API.Controllers
         // POST: api/Countries
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Country>> PostCountry(Country country)
+        //Rather than having entire Country object inside Post method
+        //we can introduce abstraction using a ViewModel/DataTransferobject class
+        //In here we dont want user to provide Id , he needs specify just the Name & ShortName
+        //By doing so we are restricting over posting attacks.
+        public async Task<ActionResult<Country>> PostCountry(CreateCountryDto createCountry)
         {
+            var country = _mapper.Map<Country>(createCountry);
             _context.Countries.Add(country);
             await _context.SaveChangesAsync();
 
